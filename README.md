@@ -21,3 +21,4 @@ The following software needs to be installed on your local computer before you s
 To get started, you can deploy based on the following deployment options:
 - standard-app-service deployment
 - private-ase-v3-deployment
+- acr-managed-identity-deployment
