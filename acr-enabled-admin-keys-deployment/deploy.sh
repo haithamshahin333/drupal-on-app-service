@@ -6,7 +6,7 @@ az group create --name $RG_NAME --location $LOCATION --output none
 
 # Create ACR instance for container image
 echo "Create ACR '$ACR_NAME' in region '$LOCATION'."
-az acr create --resource-group $RG_NAME --name $ACR_NAME --sku $ACR_SKU --output none
+az acr create --resource-group $RG_NAME --name $ACR_NAME --sku $ACR_SKU --admin-enabled true --output none
 
 # Push bitnami image to ACR
 echo "Pushing image to '$ACR_NAME'."
@@ -81,22 +81,17 @@ echo "Creating App Setttings to web app '$WEB_APP_NAME'."
 az webapp config appsettings set --resource-group $RG_NAME --name $WEB_APP_NAME \
     --settings WEBSITES_PORT=8080 --output none
 
+export ACR_USERNAME=$(az acr credential show -g $RG_NAME -n $ACR_NAME --query username --output tsv)
+export ACR_PASSWORD=$(az acr credential show -g $RG_NAME -n $ACR_NAME --query passwords[0].value --output tsv)
+
 # Now, update the web app to use the docker-compose file instead.
 echo "Udating Web App '$WEB_APP_NAME' to use docker compose config."
 az webapp config container set --name $WEB_APP_NAME --resource-group $RG_NAME \
     --docker-custom-image-name ${ACR_NAME}.azurecr.io/drupal-nginx:v1 \
     --docker-registry-server-url https://${ACR_NAME}.azurecr.io \
+    --docker-registry-server-user $ACR_USERNAME \
+    --docker-registry-server-password $ACR_PASSWORD \
     --output none
-
-# echo "enabling managed identity for web app."
-# assign role of ACR Pull to the managed identity
-# https://github.com/Azure/app-service-linux-docs/blob/master/HowTo/use_system-assigned_managed_identities.md
-echo "Giving App Service permission to pull from ACR."
-export PRINCIPAL_ID=$(az webapp identity assign --resource-group $RG_NAME --name $WEB_APP_NAME --query principalId --output tsv)
-export WEBAPP_CONFIG=$(az webapp show -g $RG_NAME -n $WEB_APP_NAME --query id --output tsv)"/config/web"
-export ACR_ID=$(az acr show -g $RG_NAME -n $ACR_NAME --query id --output tsv)
-az resource update --ids $WEBAPP_CONFIG --set properties.acrUseManagedIdentityCreds=True -o none
-az role assignment create --assignee $PRINCIPAL_ID --scope $ACR_ID --role "AcrPull" -o none
 
 echo "Restarting app to trigger pull."
 az webapp restart --name $WEB_APP_NAME --resource-group $RG_NAME
